@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Mala Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1F3A5F">
+<style>
+  :root{
+    --bg: #FAF6EC;
+    --ink: #2B2418;
+    --ink-soft: #6b5f4d;
+    --peacock: #1F3A5F;
+    --peacock-soft: #33517c;
+    --gold: #C9932E;
+    --gold-glow: rgba(201,147,46,0.45);
+    --green: #4A7856;
+    --card: #FFFFFF;
+    --line: #E7DFCE;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    padding-bottom:40px;
+  }
+  h1,h2,h3{ font-family: Georgia, 'Iowan Old Style', serif; font-weight:600; margin:0; }
+  .wrap{ max-width:480px; margin:0 auto; padding:20px 16px; }
+
+  header{ text-align:center; margin-bottom:20px; }
+  header .eyebrow{ font-size:12px; letter-spacing:2px; text-transform:uppercase; color:var(--gold); font-weight:700;}
+  header h1{ font-size:26px; color:var(--peacock); margin-top:4px;}
+
+  .card{ background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:16px; }
+
+  /* TODAY CARD */
+  .today-top{ display:flex; justify-content:space-between; align-items:center; }
+  .today-date{ font-size:13px; color:var(--ink-soft); }
+  .ring-wrap{ position:relative; width:96px; height:96px; margin:14px auto 6px; }
+  .ring-wrap svg{ transform: rotate(-90deg); }
+  .ring-bg{ fill:none; stroke:var(--line); stroke-width:9;}
+  .ring-fg{ fill:none; stroke:var(--gold); stroke-width:9; stroke-linecap:round; transition: stroke-dashoffset .4s ease;}
+  .ring-center{ position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  .ring-center .num{ font-size:26px; font-weight:700; color:var(--peacock); font-family:Georgia,serif;}
+  .ring-center .label{ font-size:10px; color:var(--ink-soft); letter-spacing:1px;}
+
+  .quickrow{ display:flex; gap:8px; justify-content:center; margin-top:12px; flex-wrap:wrap;}
+  .qbtn{ border:1.5px solid var(--peacock); background:var(--card); color:var(--peacock); font-weight:700;
+    border-radius:12px; padding:9px 14px; font-size:14px; cursor:pointer;}
+  .qbtn:active{ background:var(--peacock); color:#fff; }
+  .qbtn.custom{ border-color:var(--gold); color:var(--gold); }
+
+  .entrylist{ margin-top:12px; font-size:13px; color:var(--ink-soft); }
+  .entrylist .row{ display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px dashed var(--line);}
+  .entrylist .del{ color:#b64b3a; cursor:pointer; font-weight:700; padding-left:10px;}
+
+  /* STATS */
+  .stats-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .stat{ text-align:center; background:var(--card); border:1px solid var(--line); border-radius:14px; padding:12px 4px;}
+  .stat .n{ font-size:20px; font-weight:700; color:var(--peacock); font-family:Georgia,serif;}
+  .stat .l{ font-size:10px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px;}
+  .stat.flame .n{ color:var(--gold); }
+
+  /* CALENDAR */
+  .cal-header{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;}
+  .cal-header button{ background:none; border:none; font-size:18px; color:var(--peacock); cursor:pointer; padding:4px 10px;}
+  .cal-header h3{ font-size:16px; color:var(--peacock);}
+  .weekdays{ display:grid; grid-template-columns:repeat(7,1fr); text-align:center; font-size:10px; color:var(--ink-soft); margin-bottom:6px; text-transform:uppercase;}
+  .days{ display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .day{ position:relative; aspect-ratio:1; }
+  .day .bead{
+    width:100%; height:100%; border-radius:50%;
+    border:1.5px solid var(--line);
+    background: var(--card);
+    display:flex; align-items:center; justify-content:center;
+    font-size:11px; color:var(--ink-soft); cursor:pointer;
+    overflow:hidden; position:relative;
+  }
+  .day .bead .fill{ position:absolute; bottom:0; left:0; right:0; background:var(--green); opacity:0.85; transition:height .3s ease;}
+  .day .bead .num{ position:relative; z-index:2; }
+  .day.full .bead{ background:var(--gold); border-color:var(--gold); box-shadow:0 0 10px var(--gold-glow); color:#fff; font-weight:700;}
+  .day.today .bead{ outline:2px solid var(--peacock); outline-offset:2px; }
+  .day.empty{ visibility:hidden; }
+
+  .settings-row{ display:flex; align-items:center; justify-content:space-between; }
+  .settings-row input{ width:60px; text-align:center; font-size:16px; padding:6px; border-radius:8px; border:1px solid var(--line);}
+
+  /* MODAL */
+  .modal-bg{ position:fixed; inset:0; background:rgba(43,36,24,0.45); display:none; align-items:flex-end; z-index:50;}
+  .modal-bg.show{ display:flex; }
+  .modal{ background:var(--card); width:100%; border-radius:20px 20px 0 0; padding:20px; max-height:80vh; overflow-y:auto;}
+  .modal h3{ color:var(--peacock); margin-bottom:10px;}
+  .modal .close{ float:right; font-size:20px; color:var(--ink-soft); cursor:pointer; }
+  .custom-input-row{ display:flex; gap:8px; margin-top:10px;}
+  .custom-input-row input{ flex:1; font-size:16px; padding:10px; border-radius:10px; border:1px solid var(--line);}
+  .custom-input-row button{ background:var(--peacock); color:#fff; border:none; border-radius:10px; padding:10px 16px; font-weight:700;}
+
+  .gear{ text-align:center; margin-top:8px; }
+  .gear button{ background:none; border:none; color:var(--ink-soft); font-size:13px; cursor:pointer; text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">॥ Hare Krishna ॥</div>
+    <h1>Mala Tracker</h1>
+  </header>
+
+  <!-- TODAY -->
+  <div class="card">
+    <div class="today-top">
+      <div>
+        <div class="today-date" id="todayDateLabel"></div>
+      </div>
+      <div style="text-align:right;">
+        <div class="today-date">Target: <span id="targetLabel">16</span></div>
+      </div>
+    </div>
+
+    <div class="ring-wrap">
+      <svg width="96" height="96">
+        <circle class="ring-bg" cx="48" cy="48" r="40"></circle>
+        <circle class="ring-fg" id="ringFg" cx="48" cy="48" r="40" stroke-dasharray="251" stroke-dashoffset="251"></circle>
+      </svg>
+      <div class="ring-center">
+        <div class="num" id="todayTotal">0</div>
+        <div class="label">MALAS TODAY</div>
+      </div>
+    </div>
+
+    <div class="quickrow">
+      <button class="qbtn" onclick="addMala(1)">+1</button>
+      <button class="qbtn" onclick="addMala(5)">+5</button>
+      <button class="qbtn" onclick="addMala(16)">+16</button>
+      <button class="qbtn custom" onclick="openCustomAdd()">Custom</button>
+    </div>
+
+    <div class="entrylist" id="todayEntries"></div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-grid">
+    <div class="stat"><div class="n" id="statTotal">0</div><div class="l">Total Malas</div></div>
+    <div class="stat"><div class="n" id="statWeek">0</div><div class="l">This Week</div></div>
+    <div class="stat flame"><div class="n" id="statStreak">0</div><div class="l">Current Streak</div></div>
+    <div class="stat"><div class="n" id="statBest">0</div><div class="l">Best Streak</div></div>
+  </div>
+
+  <br>
+
+  <!-- CALENDAR -->
+  <div class="card">
+    <div class="cal-header">
+      <button onclick="changeMonth(-1)">‹</button>
+      <div style="text-align:center;">
+        <h3 id="monthLabel"></h3>
+        <div style="font-size:11px;color:var(--ink-soft);" id="monthTotalLabel"></div>
+      </div>
+      <button onclick="changeMonth(1)">›</button>
+    </div>
+    <div class="weekdays">
+      <div>S</div><div>M</div><div>T</div><div>W</div><div>T</div><div>F</div><div>S</div>
+    </div>
+    <div class="days" id="daysGrid"></div>
+  </div>
+
+  <div class="gear">
+    <button onclick="openSettings()">Change daily target</button>
+  </div>
+
+</div>
+
+<!-- Day detail modal -->
+<div class="modal-bg" id="dayModal">
+  <div class="modal">
+    <span class="close" onclick="closeModal('dayModal')">✕</span>
+    <h3 id="modalDateLabel"></h3>
+    <div id="modalEntries" class="entrylist"></div>
+    <div class="custom-input-row">
+      <input type="number" id="modalCustomInput" placeholder="Add malas...">
+      <button onclick="modalAddCustom()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom add modal (today) -->
+<div class="modal-bg" id="customModal">
+  <div class="modal">
+    <span class="close" onclick="closeModal('customModal')">✕</span>
+    <h3>Add malas today</h3>
+    <div class="custom-input-row">
+      <input type="number" id="customInput" placeholder="e.g. 10" autofocus>
+      <button onclick="submitCustomAdd()">Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div class="modal-bg" id="settingsModal">
+  <div class="modal">
+    <span class="close" onclick="closeModal('settingsModal')">✕</span>
+    <h3>Daily target</h3>
+    <div class="settings-row" style="margin-top:12px;">
+      <span>Malas per day</span>
+      <input type="number" id="targetInput" value="16">
+    </div>
+    <div class="custom-input-row">
+      <button style="width:100%;" onclick="saveTarget()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------- Storage ---------- */
+// Note: uses localStorage so data survives closing the app.
+// (When previewed inside Claude's artifact panel this won't persist —
+// that's a Claude-specific sandbox restriction. Once hosted/installed
+// as a real app on a phone, localStorage works normally.)
+const STORAGE_KEY = 'malaTrackerData';
+
+function loadData(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) return JSON.parse(raw);
+  }catch(e){}
+  return { entries:{}, target:16 };
+}
+function saveData(){ 
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+}
+
+let data = loadData();
+let viewYear, viewMonth; // month is 0-indexed
+let selectedDateKey = null;
+
+/* ---------- Date helpers ---------- */
+function todayKey(){ return dateKey(new Date()); }
+function dateKey(d){
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function dayTotal(key){
+  const arr = data.entries[key];
+  if(!arr || !arr.length) return 0;
+  return arr.reduce((a,b)=>a+b,0);
+}
+
+/* ---------- Init ---------- */
+function init(){
+  const now = new Date();
+  viewYear = now.getFullYear();
+  viewMonth = now.getMonth();
+  document.getElementById('todayDateLabel').textContent = now.toLocaleDateString(undefined,{ weekday:'long', month:'long', day:'numeric'});
+  document.getElementById('targetInput').value = data.target;
+  renderAll();
+}
+
+function renderAll(){
+  renderToday();
+  renderStats();
+  renderCalendar();
+  document.getElementById('targetLabel').textContent = data.target;
+}
+
+/* ---------- Today card ---------- */
+function renderToday(){
+  const key = todayKey();
+  const total = dayTotal(key);
+  document.getElementById('todayTotal').textContent = total;
+  const pct = Math.min(1, total/data.target);
+  const circumference = 251; // 2*pi*40
+  document.getElementById('ringFg').setAttribute('stroke-dashoffset', circumference*(1-pct));
+
+  const list = document.getElementById('todayEntries');
+  const arr = data.entries[key] || [];
+  if(arr.length===0){ list.innerHTML = '<div style="text-align:center;padding:6px 0;">No malas logged yet today</div>'; return; }
+  list.innerHTML = arr.map((v,i)=>`
+    <div class="row"><span>${v} malas</span><span class="del" onclick="deleteEntry('${key}',${i})">remove</span></div>
+  `).join('');
+}
+
+function addMala(n){
+  const key = todayKey();
+  if(!data.entries[key]) data.entries[key] = [];
+  data.entries[key].push(n);
+  saveData();
+  renderAll();
+}
+function deleteEntry(key, idx){
+  data.entries[key].splice(idx,1);
+  if(data.entries[key].length===0) delete data.entries[key];
+  saveData();
+  renderAll();
+  if(document.getElementById('dayModal').classList.contains('show')) openDayModal(key);
+}
+
+function openCustomAdd(){
+  document.getElementById('customInput').value='';
+  showModal('customModal');
+}
+function submitCustomAdd(){
+  const v = parseInt(document.getElementById('customInput').value,10);
+  if(v>0){ addMala(v); }
+  closeModal('customModal');
+}
+
+/* ---------- Stats ---------- */
+function renderStats(){
+  let total = 0;
+  Object.values(data.entries).forEach(arr=> total += arr.reduce((a,b)=>a+b,0));
+  document.getElementById('statTotal').textContent = total;
+
+  // this week: last 7 days including today
+  let weekTotal = 0;
+  for(let i=0;i<7;i++){
+    const d = new Date();
+    d.setDate(d.getDate()-i);
+    weekTotal += dayTotal(dateKey(d));
+  }
+  document.getElementById('statWeek').textContent = weekTotal;
+
+  // current streak: count back from today (or yesterday if today incomplete)
+  let streak = 0;
+  let cursor = new Date();
+  // if today isn't yet at target, start counting from yesterday
+  if(dayTotal(dateKey(cursor)) < data.target){
+    cursor.setDate(cursor.getDate()-1);
+  }
+  while(dayTotal(dateKey(cursor)) >= data.target){
+    streak++;
+    cursor.setDate(cursor.getDate()-1);
+  }
+  document.getElementById('statStreak').textContent = streak;
+
+  // longest streak ever, scanning all recorded dates
+  const keys = Object.keys(data.entries).filter(k=>dayTotal(k)>=data.target).sort();
+  let best = 0, run = 0, prev = null;
+  keys.forEach(k=>{
+    const d = new Date(k+'T00:00:00');
+    if(prev){
+      const diff = Math.round((d-prev)/86400000);
+      run = diff===1 ? run+1 : 1;
+    } else { run = 1; }
+    best = Math.max(best,run);
+    prev = d;
+  });
+  document.getElementById('statBest').textContent = Math.max(best, streak);
+}
+
+/* ---------- Calendar ---------- */
+function changeMonth(delta){
+  viewMonth += delta;
+  if(viewMonth<0){ viewMonth=11; viewYear--; }
+  if(viewMonth>11){ viewMonth=0; viewYear++; }
+  renderCalendar();
+}
+
+function renderCalendar(){
+  const label = new Date(viewYear, viewMonth, 1).toLocaleDateString(undefined,{month:'long', year:'numeric'});
+  document.getElementById('monthLabel').textContent = label;
+
+  const monthPrefix = viewYear+'-'+String(viewMonth+1).padStart(2,'0');
+  let monthTotal = 0;
+  Object.keys(data.entries).forEach(k=>{
+    if(k.startsWith(monthPrefix)) monthTotal += dayTotal(k);
+  });
+  document.getElementById('monthTotalLabel').textContent = monthTotal + ' malas this month';
+
+  const grid = document.getElementById('daysGrid');
+  grid.innerHTML = '';
+  const firstDow = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth+1, 0).getDate();
+  const todK = todayKey();
+
+  for(let i=0;i<firstDow;i++){
+    const empty = document.createElement('div');
+    empty.className='day empty';
+    grid.appendChild(empty);
+  }
+  for(let d=1; d<=daysInMonth; d++){
+    const key = viewYear+'-'+String(viewMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const total = dayTotal(key);
+    const pct = Math.min(1, total/data.target)*100;
+    const full = total >= data.target && total > 0;
+
+    const cell = document.createElement('div');
+    cell.className = 'day' + (key===todK?' today':'') + (full?' full':'');
+    cell.innerHTML = `<div class="bead" onclick="openDayModal('${key}')">
+        <div class="fill" style="height:${full?0:pct}%;"></div>
+        <span class="num">${d}</span>
+      </div>`;
+    grid.appendChild(cell);
+  }
+}
+
+/* ---------- Day modal ---------- */
+function openDayModal(key){
+  selectedDateKey = key;
+  const d = new Date(key+'T00:00:00');
+  document.getElementById('modalDateLabel').textContent = d.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric', year:'numeric'});
+  renderModalEntries();
+  document.getElementById('modalCustomInput').value='';
+  showModal('dayModal');
+}
+function renderModalEntries(){
+  const arr = data.entries[selectedDateKey] || [];
+  const list = document.getElementById('modalEntries');
+  const total = arr.reduce((a,b)=>a+b,0);
+  let html = `<div class="row" style="font-weight:700;"><span>Total</span><span>${total} / ${data.target}</span></div>`;
+  if(arr.length===0){ html += '<div style="padding:8px 0;">No malas logged this day</div>'; }
+  else{
+    html += arr.map((v,i)=>`<div class="row"><span>${v} malas</span><span class="del" onclick="deleteEntry('${selectedDateKey}',${i})">remove</span></div>`).join('');
+  }
+  list.innerHTML = html;
+}
+function modalAddCustom(){
+  const v = parseInt(document.getElementById('modalCustomInput').value,10);
+  if(v>0){
+    if(!data.entries[selectedDateKey]) data.entries[selectedDateKey]=[];
+    data.entries[selectedDateKey].push(v);
+    saveData();
+    renderAll();
+    document.getElementById('modalCustomInput').value='';
+    closeModal('dayModal');
+  }
+}
+
+/* ---------- Settings ---------- */
+function openSettings(){ showModal('settingsModal'); }
+function saveTarget(){
+  const v = parseInt(document.getElementById('targetInput').value,10);
+  if(v>0){ data.target = v; saveData(); renderAll(); }
+  closeModal('settingsModal');
+}
+
+/* ---------- Modal helpers ---------- */
+function showModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+init();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+</script>
+</body>
+</html>
