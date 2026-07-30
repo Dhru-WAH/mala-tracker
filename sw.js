@@ -1,5 +1,5 @@
-const CACHE_NAME = 'mala-tracker-v1';
-const FILES_TO_CACHE = ['./index.html', './manifest.json', './icon.svg'];
+const CACHE_NAME = 'mala-tracker-v2'; // bump this version string whenever you update the app
+const FILES_TO_CACHE = ['./index.html', './manifest.json', './icon-192.png', './icon-512.png', './icon-512-maskable.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -18,7 +18,23 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+  const req = event.request;
+  const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
+
+  if (isHTML) {
+    // Network-first: always try to get the latest version; fall back to cache if offline.
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          caches.open(CACHE_NAME).then((cache) => cache.put(req, res.clone()));
+          return res;
+        })
+        .catch(() => caches.match(req))
+    );
+  } else {
+    // Cache-first for other static assets (icons, manifest).
+    event.respondWith(
+      caches.match(req).then((cached) => cached || fetch(req))
+    );
+  }
 });
