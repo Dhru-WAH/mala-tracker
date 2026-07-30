@@ -83,6 +83,27 @@
   .day.full .bead{ background:var(--gold); border-color:var(--gold); box-shadow:0 0 10px var(--gold-glow); color:#fff; font-weight:700;}
   .day.today .bead{ outline:2px solid var(--peacock); outline-offset:2px; }
   .day.empty{ visibility:hidden; }
+  .day.future .bead{ cursor:default; opacity:0.35; background:var(--bg); }
+
+  .target-toggle{ display:inline-flex; border:1px solid var(--line); border-radius:20px; overflow:hidden; }
+  .toggle-btn{ border:none; background:var(--card); color:var(--ink-soft); font-size:11px; font-weight:700;
+    padding:5px 12px; cursor:pointer; text-transform:uppercase; letter-spacing:0.5px; }
+  .toggle-btn.active{ background:var(--peacock); color:#fff; }
+  .toggle-btn.special.active{ background:var(--gold); }
+
+  /* SPECIAL MODE THEME */
+  body.special-mode{
+    background: linear-gradient(160deg, #FFF6E4 0%, #FCEACB 45%, #F7DDAE 100%);
+  }
+  body.special-mode .card{ border-color:#E8C77E; }
+  body.special-mode header .eyebrow{ color:#9A5B1E; }
+  body.special-mode .ring-fg{ stroke:#B5651D; }
+  .special-badge{
+    display:none; text-align:center; font-size:11px; font-weight:700; letter-spacing:1px;
+    text-transform:uppercase; color:#9A5B1E; background:#FBE7C2; border:1px solid #E8C77E;
+    border-radius:20px; padding:5px 12px; margin:0 auto 12px; width:fit-content;
+  }
+  body.special-mode .special-badge{ display:block; }
 
   .settings-row{ display:flex; align-items:center; justify-content:space-between; }
   .settings-row input{ width:60px; text-align:center; font-size:16px; padding:6px; border-radius:8px; border:1px solid var(--line);}
@@ -111,12 +132,17 @@
 
   <!-- TODAY -->
   <div class="card">
+    <div class="special-badge" id="specialBadge">✨ Special Sadhana Day ✨</div>
     <div class="today-top">
       <div>
         <div class="today-date" id="todayDateLabel"></div>
       </div>
       <div style="text-align:right;">
         <div class="today-date">Target: <span id="targetLabel">16</span></div>
+        <div class="target-toggle" style="margin-top:6px;">
+          <button id="btnBasic" class="toggle-btn" onclick="setTargetMode(false)">Basic</button>
+          <button id="btnSpecial" class="toggle-btn special" onclick="setTargetMode(true)">Special</button>
+        </div>
       </div>
     </div>
 
@@ -168,7 +194,7 @@
   </div>
 
   <div class="gear">
-    <button onclick="openSettings()">Change daily target</button>
+    <button onclick="openSettings()">Edit basic / special targets</button>
   </div>
 
 </div>
@@ -202,10 +228,14 @@
 <div class="modal-bg" id="settingsModal">
   <div class="modal">
     <span class="close" onclick="closeModal('settingsModal')">✕</span>
-    <h3>Daily target</h3>
+    <h3>Targets</h3>
     <div class="settings-row" style="margin-top:12px;">
-      <span>Malas per day</span>
-      <input type="number" id="targetInput" value="16">
+      <span>Basic target (malas/day)</span>
+      <input type="number" id="basicTargetInput" value="16">
+    </div>
+    <div class="settings-row" style="margin-top:10px;">
+      <span>Special target (malas/day)</span>
+      <input type="number" id="specialTargetInput" value="24">
     </div>
     <div class="custom-input-row">
       <button style="width:100%;" onclick="saveTarget()">Save</button>
@@ -224,17 +254,32 @@ const STORAGE_KEY = 'malaTrackerData';
 function loadData(){
   try{
     const raw = localStorage.getItem(STORAGE_KEY);
-    if(raw) return JSON.parse(raw);
+    if(raw){
+      const parsed = JSON.parse(raw);
+      // migrate old single-target format
+      if(parsed.target !== undefined && parsed.basicTarget === undefined){
+        parsed.basicTarget = parsed.target;
+        parsed.specialTarget = parsed.specialTarget || 24;
+        parsed.useSpecial = false;
+        delete parsed.target;
+      }
+      if(parsed.basicTarget === undefined) parsed.basicTarget = 16;
+      if(parsed.specialTarget === undefined) parsed.specialTarget = 24;
+      if(parsed.useSpecial === undefined) parsed.useSpecial = false;
+      return parsed;
+    }
   }catch(e){}
-  return { entries:{}, target:16 };
+  return { entries:{}, basicTarget:16, specialTarget:24, useSpecial:false };
 }
 function saveData(){ 
   try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); }catch(e){}
 }
+function getCurrentTarget(){ return data.useSpecial ? data.specialTarget : data.basicTarget; }
 
 let data = loadData();
 let viewYear, viewMonth; // month is 0-indexed
 let selectedDateKey = null;
+let currentDayKey = null; // tracks which real-world day the UI is currently rendered for
 
 /* ---------- Date helpers ---------- */
 function todayKey(){ return dateKey(new Date()); }
@@ -252,16 +297,48 @@ function init(){
   const now = new Date();
   viewYear = now.getFullYear();
   viewMonth = now.getMonth();
+  currentDayKey = todayKey();
   document.getElementById('todayDateLabel').textContent = now.toLocaleDateString(undefined,{ weekday:'long', month:'long', day:'numeric'});
-  document.getElementById('targetInput').value = data.target;
+  document.getElementById('basicTargetInput').value = data.basicTarget;
+  document.getElementById('specialTargetInput').value = data.specialTarget;
   renderAll();
+  startDayWatcher();
+}
+
+/* Detect if the real-world date has rolled over while the app stayed open,
+   and refresh everything so "today" and the calendar reflect the new date. */
+function startDayWatcher(){
+  const check = () => {
+    const nowKey = todayKey();
+    if(nowKey !== currentDayKey){
+      currentDayKey = nowKey;
+      const now = new Date();
+      document.getElementById('todayDateLabel').textContent = now.toLocaleDateString(undefined,{ weekday:'long', month:'long', day:'numeric'});
+      // if the calendar was showing the month that's now "current", keep it in sync too
+      viewYear = now.getFullYear();
+      viewMonth = now.getMonth();
+      renderAll();
+    }
+  };
+  setInterval(check, 30000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) check(); });
+  window.addEventListener('focus', check);
 }
 
 function renderAll(){
   renderToday();
   renderStats();
   renderCalendar();
-  document.getElementById('targetLabel').textContent = data.target;
+  document.getElementById('targetLabel').textContent = getCurrentTarget();
+  document.getElementById('btnBasic').classList.toggle('active', !data.useSpecial);
+  document.getElementById('btnSpecial').classList.toggle('active', data.useSpecial);
+  document.body.classList.toggle('special-mode', data.useSpecial);
+}
+
+function setTargetMode(useSpecial){
+  data.useSpecial = useSpecial;
+  saveData();
+  renderAll();
 }
 
 /* ---------- Today card ---------- */
@@ -269,7 +346,7 @@ function renderToday(){
   const key = todayKey();
   const total = dayTotal(key);
   document.getElementById('todayTotal').textContent = total;
-  const pct = Math.min(1, total/data.target);
+  const pct = Math.min(1, total/getCurrentTarget());
   const circumference = 251; // 2*pi*40
   document.getElementById('ringFg').setAttribute('stroke-dashoffset', circumference*(1-pct));
 
@@ -325,17 +402,17 @@ function renderStats(){
   let streak = 0;
   let cursor = new Date();
   // if today isn't yet at target, start counting from yesterday
-  if(dayTotal(dateKey(cursor)) < data.target){
+  if(dayTotal(dateKey(cursor)) < getCurrentTarget()){
     cursor.setDate(cursor.getDate()-1);
   }
-  while(dayTotal(dateKey(cursor)) >= data.target){
+  while(dayTotal(dateKey(cursor)) >= getCurrentTarget()){
     streak++;
     cursor.setDate(cursor.getDate()-1);
   }
   document.getElementById('statStreak').textContent = streak;
 
   // longest streak ever, scanning all recorded dates
-  const keys = Object.keys(data.entries).filter(k=>dayTotal(k)>=data.target).sort();
+  const keys = Object.keys(data.entries).filter(k=>dayTotal(k)>=getCurrentTarget()).sort();
   let best = 0, run = 0, prev = null;
   keys.forEach(k=>{
     const d = new Date(k+'T00:00:00');
@@ -382,12 +459,14 @@ function renderCalendar(){
   for(let d=1; d<=daysInMonth; d++){
     const key = viewYear+'-'+String(viewMonth+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
     const total = dayTotal(key);
-    const pct = Math.min(1, total/data.target)*100;
-    const full = total >= data.target && total > 0;
+    const pct = Math.min(1, total/getCurrentTarget())*100;
+    const full = total >= getCurrentTarget() && total > 0;
+    const isFuture = key > todK;
 
     const cell = document.createElement('div');
-    cell.className = 'day' + (key===todK?' today':'') + (full?' full':'');
-    cell.innerHTML = `<div class="bead" onclick="openDayModal('${key}')">
+    cell.className = 'day' + (key===todK?' today':'') + (full?' full':'') + (isFuture?' future':'');
+    const clickAttr = isFuture ? '' : `onclick="openDayModal('${key}')"`;
+    cell.innerHTML = `<div class="bead" ${clickAttr}>
         <div class="fill" style="height:${full?0:pct}%;"></div>
         <span class="num">${d}</span>
       </div>`;
@@ -397,6 +476,7 @@ function renderCalendar(){
 
 /* ---------- Day modal ---------- */
 function openDayModal(key){
+  if(key > todayKey()) return; // safety guard: never allow future dates
   selectedDateKey = key;
   const d = new Date(key+'T00:00:00');
   document.getElementById('modalDateLabel').textContent = d.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric', year:'numeric'});
@@ -408,7 +488,7 @@ function renderModalEntries(){
   const arr = data.entries[selectedDateKey] || [];
   const list = document.getElementById('modalEntries');
   const total = arr.reduce((a,b)=>a+b,0);
-  let html = `<div class="row" style="font-weight:700;"><span>Total</span><span>${total} / ${data.target}</span></div>`;
+  let html = `<div class="row" style="font-weight:700;"><span>Total</span><span>${total} / ${getCurrentTarget()}</span></div>`;
   if(arr.length===0){ html += '<div style="padding:8px 0;">No malas logged this day</div>'; }
   else{
     html += arr.map((v,i)=>`<div class="row"><span>${v} malas</span><span class="del" onclick="deleteEntry('${selectedDateKey}',${i})">remove</span></div>`).join('');
@@ -430,8 +510,12 @@ function modalAddCustom(){
 /* ---------- Settings ---------- */
 function openSettings(){ showModal('settingsModal'); }
 function saveTarget(){
-  const v = parseInt(document.getElementById('targetInput').value,10);
-  if(v>0){ data.target = v; saveData(); renderAll(); }
+  const b = parseInt(document.getElementById('basicTargetInput').value,10);
+  const s = parseInt(document.getElementById('specialTargetInput').value,10);
+  if(b>0) data.basicTarget = b;
+  if(s>0) data.specialTarget = s;
+  saveData();
+  renderAll();
   closeModal('settingsModal');
 }
 
