@@ -105,6 +105,25 @@
   }
   body.special-mode .special-badge{ display:block; }
 
+  /* CELEBRATION */
+  .congrats-banner{
+    position:fixed; top:30%; left:50%; z-index:10000; pointer-events:none;
+    transform:translate(-50%,-40%) scale(0.85); opacity:0;
+    background:var(--peacock); color:#fff; padding:16px 26px; border-radius:18px;
+    font-family:Georgia, serif; font-size:18px; font-weight:700; text-align:center;
+    box-shadow:0 10px 30px rgba(0,0,0,0.28);
+    transition: transform .35s cubic-bezier(.34,1.56,.64,1), opacity .35s ease;
+  }
+  .congrats-banner.show{ transform:translate(-50%,-50%) scale(1); opacity:1; }
+  .feather{
+    position:fixed; top:-48px; z-index:9999; pointer-events:none; font-size:26px;
+    animation-name: featherFall; animation-timing-function: linear; animation-fill-mode: forwards;
+  }
+  @keyframes featherFall{
+    0%{ transform: translateY(0) translateX(0) rotate(0deg); opacity:1; }
+    100%{ transform: translateY(115vh) translateX(var(--drift,0px)) rotate(var(--spin,360deg)); opacity:0.85; }
+  }
+
   .settings-row{ display:flex; align-items:center; justify-content:space-between; }
   .settings-row input{ width:60px; text-align:center; font-size:16px; padding:6px; border-radius:8px; border:1px solid var(--line);}
 
@@ -123,6 +142,8 @@
 </style>
 </head>
 <body>
+<div class="congrats-banner" id="congratsBanner">🎉 Target Reached! 🎉</div>
+
 <div class="wrap">
 
   <header>
@@ -184,6 +205,7 @@
       <div style="text-align:center;">
         <h3 id="monthLabel"></h3>
         <div style="font-size:11px;color:var(--ink-soft);" id="monthTotalLabel"></div>
+        <div style="font-size:11px;color:var(--peacock);font-weight:700;" id="monthBacklogLabel"></div>
       </div>
       <button onclick="changeMonth(1)">›</button>
     </div>
@@ -360,10 +382,14 @@ function renderToday(){
 
 function addMala(n){
   const key = todayKey();
+  const prevTotal = dayTotal(key);
   if(!data.entries[key]) data.entries[key] = [];
   data.entries[key].push(n);
   saveData();
   renderAll();
+  if(prevTotal < getCurrentTarget() && dayTotal(key) >= getCurrentTarget()){
+    celebrate();
+  }
 }
 function deleteEntry(key, idx){
   data.entries[key].splice(idx,1);
@@ -381,6 +407,39 @@ function submitCustomAdd(){
   const v = parseInt(document.getElementById('customInput').value,10);
   if(v>0){ addMala(v); }
   closeModal('customModal');
+}
+
+/* Backlog: running deficit against the BASIC target only, scoped to a single
+   calendar month — it resets at the start of each month rather than
+   carrying over from prior months. Counts from day 1 of that month through
+   TODAY (live, using today's current running total) if viewing the current
+   month, or through the month's last day if viewing a past month. Future
+   months return 0. Never goes below zero — extra malas beyond what's needed
+   to clear the backlog don't bank forward as credit for future days; each
+   day is still judged fresh against the full basic target. */
+function computeMonthlyBacklog(year, month){
+  const monthStart = new Date(year, month, 1);
+  const now = new Date();
+  now.setHours(0,0,0,0);
+  const isCurrentMonth = (year === now.getFullYear() && month === now.getMonth());
+
+  let endBoundary;
+  if(isCurrentMonth){
+    endBoundary = new Date(now); // include today's current running total, live
+  } else {
+    endBoundary = new Date(year, month+1, 0); // last day of that month
+  }
+  if(monthStart > endBoundary) return 0;
+
+  let backlog = 0;
+  let cursor = new Date(monthStart);
+  while(cursor <= endBoundary){
+    const key = dateKey(cursor);
+    const total = dayTotal(key);
+    backlog = Math.max(0, backlog + data.basicTarget - total);
+    cursor.setDate(cursor.getDate()+1);
+  }
+  return backlog;
 }
 
 /* ---------- Stats ---------- */
@@ -445,6 +504,11 @@ function renderCalendar(){
   });
   document.getElementById('monthTotalLabel').textContent = monthTotal + ' malas this month';
 
+  const monthBacklog = computeMonthlyBacklog(viewYear, viewMonth);
+  document.getElementById('monthBacklogLabel').textContent = monthBacklog > 0
+    ? `Malas Due: ${monthBacklog}`
+    : 'Malas Due: 0 — caught up';
+
   const grid = document.getElementById('daysGrid');
   grid.innerHTML = '';
   const firstDow = new Date(viewYear, viewMonth, 1).getDay();
@@ -498,12 +562,16 @@ function renderModalEntries(){
 function modalAddCustom(){
   const v = parseInt(document.getElementById('modalCustomInput').value,10);
   if(v>0){
+    const prevTotal = dayTotal(selectedDateKey);
     if(!data.entries[selectedDateKey]) data.entries[selectedDateKey]=[];
     data.entries[selectedDateKey].push(v);
     saveData();
     renderAll();
     document.getElementById('modalCustomInput').value='';
     closeModal('dayModal');
+    if(selectedDateKey === todayKey() && prevTotal < getCurrentTarget() && dayTotal(selectedDateKey) >= getCurrentTarget()){
+      celebrate();
+    }
   }
 }
 
@@ -522,6 +590,33 @@ function saveTarget(){
 /* ---------- Modal helpers ---------- */
 function showModal(id){ document.getElementById(id).classList.add('show'); }
 function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+
+/* ---------- Celebration ---------- */
+function celebrate(){
+  const banner = document.getElementById('congratsBanner');
+  banner.classList.add('show');
+  setTimeout(()=> banner.classList.remove('show'), 2400);
+
+  const symbols = ['🪶','🪶','🪶','🪶','✨'];
+  const count = 22;
+  for(let i=0;i<count;i++){
+    setTimeout(()=>{
+      const el = document.createElement('div');
+      el.className = 'feather';
+      el.textContent = symbols[Math.floor(Math.random()*symbols.length)];
+      const startX = Math.random()*100;
+      const drift = (Math.random()*160-80) + 'px';
+      const spin = (Math.random()>0.5 ? '' : '-') + (300+Math.random()*300) + 'deg';
+      const duration = 2.6 + Math.random()*1.8;
+      el.style.left = startX + 'vw';
+      el.style.setProperty('--drift', drift);
+      el.style.setProperty('--spin', spin);
+      el.style.animationDuration = duration + 's';
+      document.body.appendChild(el);
+      el.addEventListener('animationend', ()=> el.remove());
+    }, i*60);
+  }
+}
 
 init();
 
